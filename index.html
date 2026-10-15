@@ -216,11 +216,11 @@ function localDB(){
 /* Modo online fuera de claude.ai: Firebase Realtime Database con usuario anónimo.
    Pegá acá la configuración web de tu proyecto de Firebase para activarlo. */
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",
-  projectId: "",
-  appId: "",
+  apiKey: "AIzaSyB7kW4RSjSrQhYapYcszc1_NBPCt7ZTrlE",
+  authDomain: "adivina-pokemon.firebaseapp.com",
+  databaseURL: "https://adivina-pokemon-default-rtdb.firebaseio.com",
+  projectId: "adivina-pokemon",
+  appId: "1:1098526835180:web:e45fdcbc4e098c7c9a40c9",
 };
 function cargarScript(src){ return new Promise((ok, mal) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = mal; document.head.appendChild(s); }); }
 async function firebaseDB(){
