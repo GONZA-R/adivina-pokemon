@@ -247,10 +247,13 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">"
 const NIVELES = {
   1: {nombre:"Entrenador", cartas:24, sin:[], igual:null, txt:"24 cartas. Todas las preguntas."},
   2: {nombre:"Líder de gimnasio", cartas:30, sin:["dos","g"], igual:null, txt:"30 cartas. Sin «Dos tipos» ni «Gen»."},
-  3: {nombre:"Alto Mando", cartas:36, sin:["t","dos","g"], igual:"c", txt:"36 cartas del mismo color. Sin preguntas de tipo ni gen."},
-  4: {nombre:"Campeón", cartas:40, sin:["t","dos","g","c"], igual:"t", txt:"40 cartas del mismo tipo. Solo forma, tamaño y evolución."},
+  3: {nombre:"Alto Mando", cartas:36, sin:["t","dos","g"], igual:"c", ocultaTipos:true, txt:"36 cartas del mismo color. Tipos ocultos y sin preguntas de tipo ni gen."},
+  4: {nombre:"Campeón", cartas:40, sin:["t","dos","g","c"], igual:"t", ocultaTipos:true, txt:"40 cartas del mismo tipo, con los tipos ocultos. Solo forma, tamaño y evolución."},
 };
 const nivelDe = n => NIVELES[n] || NIVELES[1];
+// Nivel de la partida que se está mostrando (en la portada, el elegido)
+const nivelActual = () => S.view === "local" && L ? L.nivel : S.view === "online" && O && O.g ? (O.g.nivel || 1) : S.nivel;
+const ocultaTipos = () => !!nivelDe(nivelActual()).ocultaTipos;
 function mezclar(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 function sortear(nv){
   const cfg = nivelDe(nv), ids = mezclar(enJuego());
@@ -545,7 +548,7 @@ function histHTML(){
 function cardHTML(id, o = {}){
   const p = BY[id], at = ANIM.get(id), anim = at && Date.now() - at < 600;
   const cls = ["card", o.down && "down", o.sel && "sel", o.secret && "secret", anim && "flip"].filter(Boolean).join(" ");
-  const tys = p.t.map(t => `<span class="ty" style="background:${TCOL[t]||"#777"}">${TIPOS[t]||t}</span>`).join("");
+  const tys = ocultaTipos() ? `<span class="ty" style="background:#8a8166">???</span>` : p.t.map(t => `<span class="ty" style="background:${TCOL[t]||"#777"}">${TIPOS[t]||t}</span>`).join("");
   return `<button class="${cls}" data-act="card" data-id="${id}" aria-pressed="${!!o.down}" aria-label="${esc(nombre(id))}${o.down?" (descartado)":""}"${anim ? ` style="${desde(at)}"` : ""}>
     <span class="num">#${String(id).padStart(3,"0")}</span>
     <img src="${spr(id)}" alt="" width="80" height="80">
@@ -553,7 +556,7 @@ function cardHTML(id, o = {}){
 }
 function boardHTML(board, fn, cls = ""){ return `<div class="board ${cls}">${board.map(id => cardHTML(id, fn(id))).join("")}</div>`; }
 function mineHTML(id, label = "Tu Pokémon secreto"){
-  return `<div class="panel"><div class="mine"><img src="${spr(id)}" alt=""><div><p class="muted">${label}</p><p style="font-weight:800;font-size:18px">${esc(nombre(id))}</p><p class="muted">${BY[id].t.map(t=>TIPOS[t]).join(" / ")}</p></div></div></div>`;
+  return `<div class="panel"><div class="mine"><img src="${spr(id)}" alt=""><div><p class="muted">${label}</p><p style="font-weight:800;font-size:18px">${esc(nombre(id))}</p><p class="muted">${ocultaTipos() ? "Tipo oculto" : BY[id].t.map(t=>TIPOS[t]).join(" / ")}</p></div></div></div>`;
 }
 function confetiHTML(){
   const cs = ["#ffcb05", "#e3350d", "#2fae6b", "#4f86e8", "#ea4f80", "#fff"];
