@@ -16,7 +16,8 @@ hasta adivinar el del otro.
 - **Sonidos** sintetizados y el grito del Pokémon al revelarlo; se pueden silenciar.
 - **Animaciones:** cartas que se dan vuelta y revelación con silueta al final.
 - **Marcador e historial** de partidas en el dispositivo, con récord contra la PC.
-- **Tiempo por turno** opcional (30, 60 o 90 segundos).
+- **Niveles 1 a 4:** más cartas, menos preguntas rápidas y tableros de Pokémon parecidos (mismo color o tipo).
+- **Tiempo para preguntar** (60 s por defecto): si no preguntás a tiempo, perdés el turno.
 
 ## Archivos
 

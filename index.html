@@ -163,6 +163,16 @@ input[type=text]{flex:1 1 180px}
 .opts .opt{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
 .opts .opt > .muted{min-width:130px;font-weight:700}
 
+.niveles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:860px){.niveles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.nivel{border:0;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;text-align:left;background:#0e1830;color:var(--muted);box-shadow:inset 0 0 0 2px var(--line)}
+.nivel b{font-family:var(--display);font-weight:400;font-size:11px;color:var(--fg)}
+.nivel span{font-weight:800}
+.nivel small{font-size:12.5px;line-height:1.35}
+.nivel[aria-pressed=true]{background:var(--accent);color:var(--ink);box-shadow:none}
+.nivel[aria-pressed=true] b{color:var(--ink)}
+@media (max-width:600px){.niveles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 /* Historial */
 .stats{display:flex;flex-wrap:wrap;gap:8px}
 .hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -232,8 +242,29 @@ function cargarSprites(){
   });
 }
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const N_CARTAS = 24;
-function sortear(){ const ids = enJuego(); for (let i = ids.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [ids[i],ids[j]] = [ids[j],ids[i]]; } return ids.slice(0, N_CARTAS).sort((a,b)=>a-b); }
+/* Niveles: más cartas, menos preguntas rápidas y, arriba, tableros de Pokémon parecidos
+   (mismo color o mismo tipo) para que ninguna pregunta descarte la mitad de una. */
+const NIVELES = {
+  1: {nombre:"Entrenador", cartas:24, sin:[], igual:null, txt:"24 cartas. Todas las preguntas."},
+  2: {nombre:"Líder de gimnasio", cartas:30, sin:["dos","g"], igual:null, txt:"30 cartas. Sin «Dos tipos» ni «Gen»."},
+  3: {nombre:"Alto Mando", cartas:36, sin:["t","dos","g"], igual:"c", txt:"36 cartas del mismo color. Sin preguntas de tipo ni gen."},
+  4: {nombre:"Campeón", cartas:40, sin:["t","dos","g","c"], igual:"t", txt:"40 cartas del mismo tipo. Solo forma, tamaño y evolución."},
+};
+const nivelDe = n => NIVELES[n] || NIVELES[1];
+function mezclar(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
+function sortear(nv){
+  const cfg = nivelDe(nv), ids = mezclar(enJuego());
+  let pool = ids;
+  if (cfg.igual){
+    const clave = cfg.igual === "c" ? id => [BY[id].c] : id => BY[id].t, cuenta = {};
+    ids.forEach(id => clave(id).forEach(k => cuenta[k] = (cuenta[k] || 0) + 1));
+    const alcanzan = Object.keys(cuenta).filter(k => cuenta[k] >= cfg.cartas);
+    const tema = alcanzan.length ? alcanzan[Math.floor(Math.random() * alcanzan.length)] : Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a])[0];
+    const dentro = ids.filter(id => clave(id).includes(tema));
+    pool = [...dentro, ...ids.filter(id => !clave(id).includes(tema))];   // si no alcanzan, completo con otros
+  }
+  return pool.slice(0, cfg.cartas).sort((a,b)=>a-b);
+}
 const otro = n => n === 1 ? 2 : 1;
 
 const $app = document.getElementById("app");
@@ -394,7 +425,7 @@ function dotQ(k){
   if (a === "c") return `<span class="dot" style="background:${CCOL[b]}"></span>`;
   return "";
 }
-function preguntasPara(board){
+function preguntasPara(board, nv){
   const tipos = [...new Set(board.flatMap(id => BY[id].t))].sort((a, b) => TIPOS[a].localeCompare(TIPOS[b]));
   const cols = [...new Set(board.map(id => BY[id].c))].sort((a, b) => COLORES[a].localeCompare(COLORES[b]));
   const gs = [...new Set(board.map(id => genOf(id).n))].sort((a, b) => a - b);
@@ -405,10 +436,10 @@ function preguntasPara(board){
     {cat:"Tamaño", items:["h:5", "h:10", "h:20", "w:100", "w:500", "w:1000"]},
     {cat:"Evolución", items:["pre", "evo", "leg"]},
     ...(gs.length > 1 ? [{cat:"Gen", items:gs.map(n => "g:" + n)}] : []),
-  ];
+  ].map(c => ({...c, items:c.items.filter(k => !nivelDe(nv).sin.includes(k.split(":")[0]))})).filter(c => c.items.length);
 }
-function quickHTML(board, cands, usados){
-  const cats = preguntasPara(board), cat = cats.find(c => c.cat === S.qcat) || cats[0];
+function quickHTML(board, cands, usados, nv){
+  const cats = preguntasPara(board, nv), cat = cats.find(c => c.cat === S.qcat) || cats[0];
   return `<div class="panel quick"><h2>Preguntas rápidas</h2>
     <div class="qtabs" role="tablist">${cats.map(c => `<button role="tab" class="qtab" data-act="qcat" data-c="${c.cat}" aria-selected="${c === cat}">${c.cat}</button>`).join("")}</div>
     <div class="qchips">${cat.items.map(k => {
@@ -429,7 +460,7 @@ function logItemHTML(e, quien, extra = ""){
     : e.a === null || e.a === undefined ? `<span class="ans w">…</span>`
     : e.k === "g" ? `<span class="ans ${e.a ? "y" : "n"}">${e.a ? "¡Era!" : "No era"}</span>`
     : `<span class="ans ${e.a ? "y" : "n"}">${e.a ? "Sí" : "No"}</span>`;
-  const txt = e.k === "g" ? "arriesgó <b>" + esc(nombre(e.id)) + "</b>" : e.k === "t" ? "se quedó sin tiempo" : esc(e.t);
+  const txt = e.k === "g" ? "arriesgó <b>" + esc(nombre(e.id)) + "</b>" : e.k === "t" ? "no preguntó a tiempo y perdió el turno" : esc(e.t);
   return `<li><span><span class="who">${esc(quien)}</span>${txt}${extra ? "<br>" + extra : ""}</span>${a}</li>`;
 }
 
@@ -474,8 +505,9 @@ const desde = t0 => `--t:-${Math.max(0, Date.now() - (t0 || 0))}ms`;
 const leer = (k, def) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v ?? def; } catch (e) { return def; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 S.qcat = "Tipo";
-S.timer = [0, 30, 60, 90].includes(leer("aep_timer", 0)) ? leer("aep_timer", 0) : 0;
+S.timer = [0, 30, 60, 90].includes(leer("aep_timer", 60)) ? leer("aep_timer", 60) : 60;
 S.dif = ["facil", "normal", "dificil"].includes(leer("aep_dif", "normal")) ? leer("aep_dif", "normal") : "normal";
+S.nivel = [1, 2, 3, 4].includes(leer("aep_nivel", 1)) ? leer("aep_nivel", 1) : 1;
 S.names = Object.assign({1:"", 2:""}, leer("aep_names", {}));
 S.marcador = {};   // de esta sesión: {local:{1,2}, pc:{1,2}}
 let HIST = leer("aep_hist", []); if (!Array.isArray(HIST)) HIST = [];
@@ -502,7 +534,7 @@ function histHTML(){
       : (h.rival ? (h.gane ? `<b>Le ganaste a ${esc(h.rival)}</b> online` : `${esc(h.rival)} te ganó online`) : (h.gane ? "<b>Ganaste</b> online" : "Perdiste online"));
     return `<li><img src="${spr(h.mio)}" alt="" title="${esc(nombre(h.mio))}"><img src="${spr(h.suyo)}" alt="" title="${esc(nombre(h.suyo))}">
       <span>${txt}<br><span class="muted" style="font-size:12px">${esc(nombre(h.mio))} vs ${esc(nombre(h.suyo))}</span></span>
-      <span class="r muted">${cuando(h.d)}<br>${h.q} preg. · ${fmt(h.s || 0)}</span></li>`;
+      <span class="r muted">${cuando(h.d)}${h.nv ? " · Nv " + h.nv : ""}<br>${h.q} preg. · ${fmt(h.s || 0)}</span></li>`;
   }).join("");
   return `<section class="panel"><div class="row" style="justify-content:space-between"><h2>Tus partidas</h2><button class="btn ghost mini" data-act="clearhist">Borrar historial</button></div>
     <div class="stats">${porDif}${stat("Online", on)}${loc.length ? `<span class="chip">En un dispositivo: ${plural(loc.length, "partida")}</span>` : ""}</div>
@@ -558,16 +590,21 @@ function homeHTML(){
   <section class="hero">
     <div class="intro">
       <h1>¿Quién es ese Pokémon?</h1>
-      <p style="font-size:17px">Cada jugador elige un Pokémon secreto de un tablero de ${N_CARTAS}. Por turnos se hacen preguntas de sí o no y van bajando cartas. Gana quien adivine primero el Pokémon del otro.</p>
+      <p style="font-size:17px">Cada jugador elige un Pokémon secreto de un tablero de ${nivelDe(S.nivel).cartas}. Por turnos se hacen preguntas de sí o no y van bajando cartas. Gana quien adivine primero el Pokémon del otro.</p>
       <div class="lineup" aria-hidden="true">${lineup}</div>
     </div>
     <div class="panel rules"><h2>Cómo se juega</h2><ol>
-      <li>Los dos ven el mismo tablero de ${N_CARTAS} Pokémon, sorteados de las generaciones que elijas.</li>
+      <li>Los dos ven el mismo tablero de Pokémon (de 24 a 40 según el nivel), sorteados de las generaciones que elijas.</li>
       <li>Cada uno elige uno en secreto.</li>
       <li>En tu turno hacés una pregunta: «¿Es de tipo Agua?», «¿Es amarillo?», «¿Tiene alas?». Con las preguntas rápidas el juego responde solo.</li>
       <li>Con la respuesta, bajá las cartas que descartás (o tocá «Bajar las que no coinciden»).</li>
       <li>Cuando estés seguro, tocá «Adivinar». Si le errás, perdés el turno.</li>
+      <li>Ojo con el reloj: si no preguntás a tiempo, perdés el turno.</li>
     </ol></div>
+  </section>
+  <section class="panel"><h2>Nivel</h2>
+    <div class="niveles" role="group" aria-label="Nivel">${Object.entries(NIVELES).map(([n, v]) => `<button class="nivel" data-act="nivel" data-v="${n}" aria-pressed="${+n === S.nivel}">
+      <b>Nivel ${n}</b><span>${v.nombre}</span><small>${v.txt}</small></button>`).join("")}</div>
   </section>
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>Generaciones en juego</h2><span class="muted">${enJuego().length} Pokémon disponibles</span></div>
     <div class="gens" role="group" aria-label="Generaciones">${GENS.map(g => `<button class="gen" data-act="gen" data-g="${g.n}" aria-pressed="${gens.includes(g.n)}">
@@ -585,7 +622,7 @@ function homeHTML(){
     <div class="panel"><h2>Online, cada uno en su pantalla</h2>${online}</div>
   </section>
   <section class="panel opts"><h2>Opciones</h2>
-    <div class="opt"><span class="muted">Tiempo por turno</span>${seg("timer", S.timer, [[0, "Sin límite"], [30, "30 s"], [60, "60 s"], [90, "90 s"]])}</div>
+    <div class="opt"><span class="muted" title="Si no preguntás ni adivinás a tiempo, perdés el turno">Tiempo para preguntar</span>${seg("timer", S.timer, [[0, "Sin límite"], [30, "30 s"], [60, "60 s"], [90, "90 s"]])}</div>
     <div class="opt"><span class="muted">Sonido</span>${seg("snd", SND ? 1 : 0, [[1, "Activado"], [0, "Silencio"]])}</div>
     <div class="opt"><span class="muted">Nombres</span><div class="row" style="flex:1">
       <input type="text" id="name1" maxlength="16" placeholder="Jugador 1 (vos, también online)" value="${esc(S.names[1])}" aria-label="Nombre del jugador 1">
@@ -598,12 +635,12 @@ function homeHTML(){
 let pcT = null;
 function newLocal(pc){
   clearTimeout(pcT); ANIM.clear();
-  L = {pc, dif:S.dif, timer:S.timer, names:{...S.names}, board:sortear(), secret:{1:null,2:null}, flip:{1:[],2:[]}, cur:1, phase:"pick",
+  L = {pc, dif:S.dif, nivel:S.nivel, timer:S.timer, names:{...S.names}, board:sortear(S.nivel), secret:{1:null,2:null}, flip:{1:[],2:[]}, cur:1, phase:"pick",
        curtain:!pc, guessMode:false, sel:null, msg:"", winner:null, log:[], asked:false, askedAt:0, thinking:false, start:Date.now(), turnAt:0, overAt:0};
   S.view = "local"; render(); window.scrollTo(0, 0);
 }
 const nombreJ = n => L.pc ? (n === 1 ? "Vos" : "La PC") : (L.names[n] || "Jugador " + n);
-const modoKey = () => L.pc ? "pc-" + L.dif : "local";
+const modoKey = () => (L.pc ? "pc-" + L.dif : "local") + "-" + L.nivel;
 function marc(){ const k = modoKey(); return S.marcador[k] || (S.marcador[k] = {1:0, 2:0}); }
 function marcadorHTML(){
   const m = marc(); if (!m[1] && !m[2]) return "";
@@ -614,7 +651,7 @@ function finLocal(w){
   L.winner = w; L.phase = "over"; L.overAt = Date.now(); L.guessMode = false; L.thinking = false; L.curtain = false;
   marc()[w]++;
   const humanoGana = !L.pc || w === 1;
-  guardarHist({d:Date.now(), m:L.pc ? "pc" : "local", dif:L.dif, gane:L.pc ? w === 1 : null, gan:nombreJ(w), per:nombreJ(otro(w)),
+  guardarHist({d:Date.now(), m:L.pc ? "pc" : "local", dif:L.dif, nv:L.nivel, gane:L.pc ? w === 1 : null, gan:nombreJ(w), per:nombreJ(otro(w)),
     mio:L.secret[1], suyo:L.secret[2], q:L.log.filter(e => e.k === "q").length, s:Math.round((Date.now() - L.start) / 1000)});
   sfx(humanoGana ? "win" : "lose");
   const adiv = L.secret[otro(w)], g0 = L;
@@ -634,7 +671,7 @@ function pcTurno(){
 function pcJuega(){
   const cands = L.board.filter(id => !L.flip[2].includes(id));
   const usadas = new Set(L.log.filter(e => e.by === 2 && e.qk).map(e => e.qk));
-  const qs = preguntasPara(L.board).flatMap(c => c.items).filter(k => !usadas.has(k))
+  const qs = preguntasPara(L.board, L.nivel).flatMap(c => c.items).filter(k => !usadas.has(k))
     .map(k => { const y = cands.filter(id => cumple(id, k)).length; return {k, s:Math.min(y, cands.length - y)}; })
     .filter(x => x.s > 0).sort((a, b) => b.s - a.s);
   const azar = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -667,7 +704,7 @@ function localHTML(){
     return finalHTML({t0:L.overAt, gano:!L.pc || w === 1,
       titulo: L.pc ? (w === 1 ? "¡Ganaste!" : "Ganó la PC") : "¡Ganó " + esc(nombreJ(w)) + "!",
       figs:[1, 2].map(n => ({id:L.secret[n], quien:nombreJ(n), guessed:n === otro(w)})),
-      extra:`<p class="muted">Duró ${fmt((L.overAt - L.start) / 1000)} · ${plural(L.log.filter(e => e.k === "q").length, "pregunta")}${L.pc ? " · PC " + DIFS[L.dif] : ""}</p>
+      extra:`<p class="muted">Nivel ${L.nivel} · Duró ${fmt((L.overAt - L.start) / 1000)} · ${plural(L.log.filter(e => e.k === "q").length, "pregunta")}${L.pc ? " · PC " + DIFS[L.dif] : ""}</p>
         <p class="chip">Marcador: ${esc(nombreJ(1))} ${m[1]} – ${m[2]} ${esc(nombreJ(2))}</p>`,
       botones:`<button class="btn pri" data-act="again">Revancha</button><button class="btn ghost" data-act="home">Menú</button>`});
   }
@@ -690,7 +727,7 @@ function localHTML(){
   if (pcPiensa) accion = `<div class="panel ask"><p class="q thinking">La PC está pensando<span class="dots"></span></p><p class="muted">Le quedan ${L.board.length - L.flip[2].length} cartas en pie.</p></div>`;
   else if (L.asked && mia) accion = `<div class="panel ask pop" style="${desde(L.askedAt)}"><p class="muted">Preguntaste</p><p class="q">${esc(mia.t)}</p>
       <p class="resp ${mia.a ? "y" : "n"}">${mia.a ? "SÍ" : "NO"}</p>${autoflipBtn(L.board, flips, mia)}<p class="muted">Ahora podés adivinar o terminar tu turno.</p></div>`;
-  else accion = quickHTML(L.board, cands, new Set(L.log.filter(e => e.by === yo && e.qk).map(e => e.qk)));
+  else accion = quickHTML(L.board, cands, new Set(L.log.filter(e => e.by === yo && e.qk).map(e => e.qk)), L.nivel);
   let pcPanel = "";
   if (L.pc){
     const ult = [...L.log].reverse().find(e => e.by === 2);
@@ -705,7 +742,7 @@ function localHTML(){
     ? (L.sel ? `<span>¿Es <b>${esc(nombre(L.sel))}</b>?</span><button class="btn red" data-act="lguess">Sí, adivinar</button><button class="btn ghost" data-act="cancelguess">Cancelar</button>`
              : `<span>Tocá el Pokémon que creés que tiene ${L.pc ? "la PC" : "tu rival"}.</span><button class="btn ghost" data-act="cancelguess">Cancelar</button>`)
     : `<button class="btn ok" data-act="lend">${L.asked ? "Terminar turno" : "Pasar turno"}</button><button class="btn red" data-act="guessmode">Adivinar</button>`;
-  return `<div class="status"><div class="row"><span class="chip turn">${pcPiensa ? "Turno de la PC" : L.pc ? "Tu turno" : "Turno de " + esc(nombreJ(c))}</span><span class="chip">Te quedan ${cands.length} en pie</span>${reloj ? relojChip(reloj) : ""}${marcadorHTML()}</div>
+  return `<div class="status"><div class="row"><span class="chip turn">${pcPiensa ? "Turno de la PC" : L.pc ? "Tu turno" : "Turno de " + esc(nombreJ(c))}</span><span class="chip">Te quedan ${cands.length} en pie</span><span class="chip">Nivel ${L.nivel}</span>${reloj ? relojChip(reloj) : ""}${marcadorHTML()}</div>
     <div class="row">${muteBtn()}<button class="btn ghost" data-act="home">Salir</button></div></div>
     <div class="play"><div>${boardHTML(L.board, id => ({down: flips.includes(id), sel: L.guessMode && L.sel === id}), L.guessMode ? "guessing" : "")}</div>
     <aside class="side">${accion}${mineHTML(L.secret[yo])}${pcPanel}
@@ -715,11 +752,11 @@ function localHTML(){
 
 /* ---------- temporizador de turno ---------- */
 function relojInfo(){
-  if (S.view === "local" && L && L.timer && L.phase === "play" && !L.curtain && !(L.pc && L.cur === 2) && L.turnAt)
+  if (S.view === "local" && L && L.timer && L.phase === "play" && !L.curtain && !L.asked && !(L.pc && L.cur === 2) && L.turnAt)
     return {limit:L.timer, start:L.turnAt, fin:() => {
       if (L._to === L.turnAt) return; L._to = L.turnAt;
       L.log.push({by:L.cur, k:"t", a:true});
-      toast("¡Se acabó el tiempo" + (L.pc ? "!" : " de " + nombreJ(L.cur) + "!")); sfx("no");
+      toast("¡Se acabó el tiempo" + (L.pc ? "! Perdés el turno." : " de " + nombreJ(L.cur) + "! Pierde el turno.")); sfx("no");
       if (!L.pc) L.msg = nombreJ(L.cur) + " se quedó sin tiempo.";
       terminarTurno();
     }};
@@ -728,7 +765,7 @@ function relojInfo(){
     if (phaseOf(g) !== "playing" || g.turn !== me || (last && last.a === null)) return null;
     return {limit:g.timer, start:O.turnStart, fin:() => {
       const k = "t" + log.length; if (O.done[k]) return; O.done[k] = true;
-      O.guessMode = false; O.sel = null; toast("¡Se acabó tu tiempo!"); sfx("no");
+      O.guessMode = false; O.sel = null; toast("¡Se acabó tu tiempo! Perdés el turno."); sfx("no");
       write(() => gameRef(O.code).update({turn:otro(me), log:[...log, {by:me, k:"t", a:true}]}));
     }};
   }
@@ -758,7 +795,7 @@ async function createOnline(){
   try {
     let code;
     for (let i = 0; i < 6; i++){ code = genCode(); const s = await gameRef(code).get(); if (!s.exists) break; }
-    await gameRef(code).set({code, board:sortear(), p1:uid, p2:null, n1:S.names[1] || "", ready1:false, ready2:false, turn:1, log:[], winner:null, reveal1:null, reveal2:null, timer:S.timer, created:Date.now()});
+    await gameRef(code).set({code, board:sortear(S.nivel), nivel:S.nivel, p1:uid, p2:null, n1:S.names[1] || "", ready1:false, ready2:false, turn:1, log:[], winner:null, reveal1:null, reveal2:null, timer:S.timer, created:Date.now()});
     await enterOnline(code);
   } catch (e) { S.joinErr = e && e.code === "invalid_argument" ? "Tu cuenta no tiene permiso para crear partidas en esta página. Pedile al dueño acceso de Editor." : "No se pudo crear la partida."; }
   S.busy = false; render();
@@ -842,7 +879,7 @@ function afterSnap(){
   const mio = g["reveal" + me] || O.priv.secret, suyo = g["reveal" + riv];
   if (g.winner && mio && suyo && !O.done.hist){
     O.done.hist = true;
-    guardarHist({key:"on:" + O.code + ":" + g.created, d:Date.now(), m:"online", gane:g.winner === me, rival:who(riv) === "Tu rival" ? "" : who(riv), mio, suyo,
+    guardarHist({key:"on:" + O.code + ":" + g.created, d:Date.now(), m:"online", nv:g.nivel || 1, gane:g.winner === me, rival:who(riv) === "Tu rival" ? "" : who(riv), mio, suyo,
       q:log.filter(e => e.k === "q").length, s:Math.round((Date.now() - (g.created || Date.now())) / 1000)});
   }
 }
@@ -857,7 +894,7 @@ function onlineHTML(){
   const pending = last && last.a === null;
   const myTurn = ph === "playing" && g.turn === me && !pending;
   const reloj = relojInfo();
-  const top = `<div class="status"><div class="row"><span class="muted">Partida</span><span class="code">${esc(O.code)}</span><button class="btn ghost" data-act="copy" style="padding:6px 10px">Copiar código</button></div>
+  const top = `<div class="status"><div class="row"><span class="muted">Partida</span><span class="code">${esc(O.code)}</span><span class="chip">Nivel ${g.nivel || 1}</span><button class="btn ghost" data-act="copy" style="padding:6px 10px">Copiar código</button></div>
     <div class="row">${ph === "playing" ? `<span class="chip ${myTurn ? "turn" : ""}">${myTurn ? "Tu turno" : pending ? (last.by === me ? "Esperando respuesta" : "Te toca responder") : "Turno de " + esc(who(riv))}</span>` : ""}
     ${reloj ? relojChip(reloj) : g.timer && ph === "playing" ? `<span class="chip muted">⏱ ${g.timer} s por turno</span>` : ""}
     ${muteBtn()}<button class="btn ghost" data-act="leave">Salir</button></div></div>`;
@@ -890,7 +927,7 @@ function onlineHTML(){
   } else if (pending && last.by === me){
     action = `<div class="panel"><p class="muted">Esperando que ${esc(who(riv))} responda<span class="dots"></span></p></div>`;
   } else if (myTurn){
-    action = quickHTML(g.board, cands, new Set(log.filter(e => e.by === me && e.qk).map(e => e.qk))) + `<div class="panel"><h2>O escribí tu pregunta</h2>
+    action = quickHTML(g.board, cands, new Set(log.filter(e => e.by === me && e.qk).map(e => e.qk)), g.nivel) + `<div class="panel"><h2>O escribí tu pregunta</h2>
       <div class="row"><input type="text" id="q" maxlength="140" placeholder="¿Es de color amarillo?" value="${esc(O.draft)}" aria-label="Pregunta">
       <button class="btn pri" data-act="ask">Preguntar</button></div>
       <button class="btn red" data-act="guessmode">Adivinar</button></div>`;
@@ -937,6 +974,7 @@ function act(a, t){
     case "pc": newLocal(true); break;
     case "again": newLocal(L ? L.pc : false); break;
     case "dif": S.dif = t.dataset.v; guardar("aep_dif", S.dif); render(); break;
+    case "nivel": S.nivel = +t.dataset.v; guardar("aep_nivel", S.nivel); sfx("sel"); render(); break;
     case "timer": S.timer = +t.dataset.v; guardar("aep_timer", S.timer); render(); break;
     case "snd": case "mute":
       SND = a === "snd" ? t.dataset.v === "1" : !SND;
