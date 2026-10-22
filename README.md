@@ -6,14 +6,23 @@ hasta adivinar el del otro.
 
 ## Modos de juego
 
+- **Contra la PC:** jugás solo; la PC elige su Pokémon y pregunta para adivinar el tuyo (Fácil, Normal o Difícil).
 - **En un solo dispositivo:** se pasan el celular o la compu. Una pantalla de pausa tapa el tablero entre turnos.
 - **Online:** cada uno en su pantalla, con un código de partida de 4 letras. Necesita Firebase (ver abajo).
+
+## Extras
+
+- **Preguntas rápidas** (tipo, color, forma, tamaño, evolución, generación): el juego responde solo y ofrece bajar las cartas que no coinciden.
+- **Sonidos** sintetizados y el grito del Pokémon al revelarlo; se pueden silenciar.
+- **Animaciones:** cartas que se dan vuelta y revelación con silueta al final.
+- **Marcador e historial** de partidas en el dispositivo, con récord contra la PC.
+- **Tiempo por turno** opcional (30, 60 o 90 segundos).
 
 ## Archivos
 
 | Archivo | Qué es |
 |---|---|
-| `index.html` | Todo el juego: diseño, lógica y datos de los Pokémon (nombre en español y tipos) |
+| `index.html` | Todo el juego: diseño, lógica y datos de los Pokémon (nombre en español, tipos, color, forma, tamaño y evolución) |
 | `g/g1.json` … `g/g9.json` | Las imágenes de cada generación; se descargan solo las que hacen falta |
 | `database.rules.json` | Reglas de seguridad para Firebase Realtime Database |
 
