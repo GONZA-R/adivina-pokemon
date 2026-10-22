@@ -218,8 +218,8 @@ const GENS = [
   {n:7, region:"Alola", min:722, max:809, icon:778}, {n:8, region:"Galar", min:810, max:905, icon:816},
   {n:9, region:"Paldea", min:906, max:1025, icon:912},
 ].filter(g => g.min <= DATA.length);
-let gens = GENS.map(g => g.n);
-try { const v = JSON.parse(localStorage.getItem("aep_gens") || "null"); if (Array.isArray(v) && v.length && v.every(n => GENS.some(g => g.n === n))) gens = v; } catch (e) {}
+let gens = [1];   // por defecto solo Gen 1
+try { const v = JSON.parse(localStorage.getItem("aep_gens2") || "null"); if (Array.isArray(v) && v.length && v.every(n => GENS.some(g => g.n === n))) gens = v; } catch (e) {}
 const genOf = id => GENS.find(g => id >= g.min && id <= g.max);
 const enJuego = () => DATA.filter(p => gens.includes(genOf(p.id).n)).map(p => p.id);
 const nombre = id => BY[id].n;
@@ -612,7 +612,7 @@ function homeHTML(){
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>Generaciones en juego</h2><span class="muted">${enJuego().length} Pokémon disponibles</span></div>
     <div class="gens" role="group" aria-label="Generaciones">${GENS.map(g => `<button class="gen" data-act="gen" data-g="${g.n}" aria-pressed="${gens.includes(g.n)}">
       <img src="${spr(g.icon)}" alt=""><span><b>Gen ${g.n}</b><small>${g.region} · ${g.max - g.min + 1}</small></span></button>`).join("")}</div>
-    <div class="row"><button class="btn ghost" data-act="gens-all" style="padding:8px 14px">Todas</button><button class="btn ghost" data-act="gens-none" style="padding:8px 14px">Solo Gen 1</button></div>
+    <div class="row"><button class="btn ghost" data-act="gens-all" style="padding:8px 14px">${gens.length === GENS.length ? "Quitar todas" : "Todas"}</button></div>
   </section>
   <section class="modes">
     <div class="panel"><h2>Contra la PC</h2>
@@ -987,14 +987,14 @@ function act(a, t){
       if (!confirm("¿Borrar todo el historial de partidas de este dispositivo?")) return;
       HIST = []; guardar("aep_hist", HIST); render(); break;
     case "gen": case "gens-all": case "gens-none": {
-      if (a === "gens-all") gens = GENS.map(g => g.n);
+      if (a === "gens-all") gens = gens.length === GENS.length ? [1] : GENS.map(g => g.n);   // alterna: todas ↔ solo Gen 1 (siempre queda una)
       else if (a === "gens-none") gens = [1];
       else {
         const n = +t.dataset.g;
         if (gens.includes(n)){ if (gens.length === 1){ toast("Tiene que quedar al menos una generación."); return; } gens = gens.filter(x => x !== n); }
         else gens = [...gens, n].sort((x, y) => x - y);
       }
-      try { localStorage.setItem("aep_gens", JSON.stringify(gens)); } catch (e) {}
+      try { localStorage.setItem("aep_gens2", JSON.stringify(gens)); } catch (e) {}
       render(); break;
     }
     case "create": createOnline(); break;
